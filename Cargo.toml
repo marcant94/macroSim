@@ -1,0 +1,17 @@
+[package]
+name = "simulador_politica"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.14"
+bevy_egui = "0.28" # Ideal para paneles de control, tablas y dashboards
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Optimización para que compile más rápido en modo Debug con Bevy
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
