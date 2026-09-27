@@ -16,6 +16,22 @@ El juego es un *dashboard* de gestión puro, al estilo de los informes y paneles
 
 ---
 
+## 🎯 Visión a Largo Plazo (Roadmap)
+
+Gobiernas una **ciudad-estado** (como las antiguas polis griegas): eres presidente **y** alcalde a la vez, con los problemas y decisiones de ambos, al estilo de los modos de gestión de SimCity o Cities: Skylines (sin mapa: todo por sliders, gráficas e informes).
+
+Ideas clave que guiarán el desarrollo:
+
+* **Población como marcador:** si haces las cosas bien (impuestos razonables, servicios cubiertos, empleo sano) la población crece; si no, se va y quedas en crisis.
+* **Servicios públicos:** sanidad (clínicas, hospitales), educación (colegios, institutos, universidades), seguridad (comisarías, policía), bomberos, cárceles, basuras/reciclaje y carreteras/transportes. Construirlos **y mantenerlos** (gasto mensual recurrente).
+* **Público vs privado:** bajas impuestos/favoreces leyes para atraer inversión privada, o prestas el servicio públicamente; puedes privatizar a cambio de ingresos y pérdida de control.
+* **Delincuencia emergente:** sube si fallan empleo, servicios y educación; la combatirás con policía y cárceles… o mejorando la sociedad.
+* **Mix energético:** renovables (caras de instalar, intermitentes) vs fósiles (baratas de instalar pero caras de operar a la larga).
+
+En versiones futuras y muy lejanas: leyes, ejército, comercio, importaciones/exportaciones (modo presidente). Ver `docs/ROADMAP.md` para el detalle y la prioridad de implementación.
+
+---
+
 ## 🧱 Estructura del Proyecto
 
 ```text
