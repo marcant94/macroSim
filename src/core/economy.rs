@@ -10,6 +10,10 @@ pub struct EconomyState {
     pub corporate_tax: f32,     // Porcentaje (ej: 21.0)
     pub income_tax: f32,
     pub public_spending: f32, // gasto mensual por habitante
+    /// Gasto mensual en servicios públicos (lo calcula `ServicesState::tick`).
+    /// `default` por compatibilidad con partidas antiguas.
+    #[serde(default)]
+    pub service_upkeep: f64,
 }
 
 impl Default for EconomyState {
@@ -21,6 +25,7 @@ impl Default for EconomyState {
             corporate_tax: 20.0,
             income_tax: 15.0,
             public_spending: 2.0,
+            service_upkeep: 0.0,
         }
     }
 }
@@ -32,9 +37,10 @@ impl EconomyState {
             * (self.corporate_tax as f64 * 0.5 + self.income_tax as f64 * 0.8)
     }
 
-    /// Gasto mensual: gasto por habitante x población.
+    /// Gasto mensual: gasto por habitante x población + mantenimiento de
+    /// los servicios públicos (clínicas, comisarías, basuras…).
     pub fn monthly_expenses(&self) -> f64 {
-        self.population as f64 * self.public_spending as f64
+        self.population as f64 * self.public_spending as f64 + self.service_upkeep
     }
 
     /// Balance mensual (ingresos - gastos). Negativo = déficit.

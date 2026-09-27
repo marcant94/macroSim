@@ -1,14 +1,21 @@
-//! Núcleo de simulación: orquesta economía, energía, calendario e historial.
+//! Núcleo de simulación: orquesta economía, servicios, energía, suelo,
+//! demografía, calendario e historial.
 //!
 //! Este módulo NO depende de egui; solo contiene datos y lógica.
 
+pub mod demographics;
 pub mod economy;
 pub mod energy;
+pub mod land;
+pub mod services;
 pub mod settings;
 pub mod time;
 
+pub use demographics::DemographicsState;
 pub use economy::EconomyState;
 pub use energy::EnergyState;
+pub use land::LandState;
+pub use services::ServicesState;
 pub use time::Calendar;
 
 /// Histórico de indicadores para las gráficas (ventana deslizante).
@@ -37,6 +44,11 @@ impl History {
 #[derive(Debug, Clone)]
 pub struct Simulation {
     pub economy: EconomyState,
+    pub services: ServicesState,
+    // Suelo: se expondrá en la UI cuando exista el panel de servicios.
+    #[allow(dead_code)]
+    pub land: LandState,
+    pub demographics: DemographicsState,
     pub energy: EnergyState,
     pub clock: Calendar,
     pub history: History,
@@ -49,6 +61,9 @@ impl Default for Simulation {
     fn default() -> Self {
         Self {
             economy: EconomyState::default(),
+            services: ServicesState::default(),
+            land: LandState::default(),
+            demographics: DemographicsState::default(),
             energy: EnergyState::default(),
             clock: Calendar::default(),
             history: History::default(),
@@ -62,14 +77,20 @@ impl Default for Simulation {
 impl Simulation {
     /// Avanza la simulación un mes completo.
     pub fn tick_month(&mut self) {
-        // 1. Economía usa el déficit energético del mes pasado.
+        // 1. Servicios: el sector privado crece según el clima de inversión y
+        //    se calcula el gasto mensual público en servicios.
+        let climate = services::investment_climate(&self.economy);
+        self.economy.service_upkeep = self.services.tick(self.economy.population, climate);
+        // 2. Demografía: el reparto de clases deriva con la satisfacción del mes.
+        self.demographics.tick(&self.services, &self.economy);
+        // 3. Economía usa el déficit energético del mes pasado.
         let deficit = self.energy.has_deficit();
         self.economy.tick(deficit);
-        // 2. La energía crece con la nueva actividad económica.
+        // 4. La energía crece con la nueva actividad económica.
         self.energy.tick(&self.economy);
-        // 3. Calendario.
+        // 5. Calendario.
         self.clock.advance_month();
-        // 4. Histórico.
+        // 6. Histórico.
         self.history.push(
             self.economy.money,
             self.economy.unemployment_rate as f64,
@@ -87,5 +108,45 @@ impl Simulation {
             self.accumulator -= 1.0;
             self.tick_month();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Un año de simulación no debe romper invariantes básicas del esqueleto.
+    #[test]
+    fn un_anho_de_ticks_mantiene_invariantes() {
+        let mut sim = Simulation::default();
+        for _ in 0..12 {
+            sim.tick_month();
+        }
+        assert_eq!(sim.clock.year, 2027);
+        // La cobertura de cada servicio está en 0..=1.
+        for st in &sim.services.services {
+            assert!((0.0..=1.0).contains(&st.coverage));
+            assert!(st.private_units.is_finite() && st.public_units.is_finite());
+        }
+        // El suelo ocupado no puede superar el límite (los servicios parten
+        // por debajo del total y crecen acotados a la demanda).
+        let used = sim.land.used(&sim.services, &sim.energy);
+        assert!(used <= sim.land.total_hectareas);
+        // Las cuotas de clase suman 1.
+        let d = &sim.demographics;
+        assert!((d.low_share + d.mid_share + d.high_share - 1.0).abs() < 1e-4);
+    }
+
+    /// El sector privado cubre demanda insatisfecha cuando el clima es bueno.
+    #[test]
+    fn sector_privado_crece_con_buen_clima() {
+        let mut sim = Simulation::default();
+        sim.economy.corporate_tax = 5.0; // clima de inversión muy favorable
+        let before = sim.services.get(crate::core::services::ServiceKind::Health).private_units;
+        for _ in 0..6 {
+            sim.tick_month();
+        }
+        let after = sim.services.get(crate::core::services::ServiceKind::Health).private_units;
+        assert!(after > before);
     }
 }
