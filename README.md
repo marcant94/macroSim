@@ -56,3 +56,19 @@ Compila y ejecuta el proyecto:
 ```bash
 cargo run
 ```
+
+---
+
+## ©️ Licencia
+
+**Todos los derechos reservados** (© 2026 Mario Cantelar).
+
+Este repositorio es público para mostrar el proyecto y compartir las ideas de
+diseño, pero **no se concede licencia** para copiar, modificar, distribuir o
+usar el código o sus contenidos. El juego está destinado a un lanzamiento
+comercial futuro; el código aquí publicado no puede usarse como base de un
+producto propio, ni total ni parcialmente.
+
+Si quieres aprender del enfoque (simulación macroeconómica, servicios con
+retroalimentación, etc.), las preguntas y discusiones por GitHub Issues son
+bienvenidas.
