@@ -61,7 +61,8 @@ cargo run
 
 ## ©️ Licencia
 
-**Todos los derechos reservados** (© 2026 Mario Cantelar).
+**Todos los derechos reservados** (© 2026 Mario Cantelar) — ver el fichero
+[`LICENSE`](LICENSE).
 
 Este repositorio es público para mostrar el proyecto y compartir las ideas de
 diseño, pero **no se concede licencia** para copiar, modificar, distribuir o

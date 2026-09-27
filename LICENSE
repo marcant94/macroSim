@@ -1,0 +1,33 @@
+Copyright (c) 2026 Mario Cantelar. Todos los derechos reservados.
+
+1. Propiedad
+   Este repositorio contiene software propietario: el juego MacroSim
+   (código fuente, documentación de diseño y demás contenidos). El autor
+   conserva todos los derechos de propiedad intelectual sobre el código
+   y sus contenidos, incluida la explotación comercial futura
+   (distribución en Steam u otras plataformas).
+
+2. Lo que NO está permitido
+   NO se concede licencia de uso, copia, modificación, distribución,
+   sublicencia ni explotación del código fuente o de los contenidos de
+   este repositorio, ni total ni parcialmente, con fines comerciales o
+   no comerciales. En particular, NO está permitido:
+   - Compilar y redistribuir el juego o derivados del mismo.
+   - Reutilizar el código (completo o en parte) como base de otro
+     proyecto, propio o de terceros.
+   - Publicar copias, forks con distribución o ports del código.
+
+3. Lo que SÍ está permitido
+   - Ver, estudiar y aprender del código y del diseño expuestos aquí.
+   - Citar e idear sobre conceptos y mecánicas del juego (las ideas en
+     sí no están protegidas; su implementación, sí).
+   - Discutir el proyecto y preguntar por GitHub Issues.
+
+4. Ausencia de garantía
+   Este software se proporciona "tal cual", sin garantía de ningún tipo.
+   El autor no se hace responsable de ningún uso del repositorio.
+
+El permiso expreso y por escrito del autor es requisito para cualquier
+uso del código o contenidos no contemplado en la sección 3.
+
+Contacto: a través de GitHub Issues en este repositorio.
