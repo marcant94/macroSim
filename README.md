@@ -57,6 +57,27 @@ Compila y ejecuta el proyecto:
 cargo run
 ```
 
+### Compilar para Web (WASM)
+La misma aplicación se puede ejecutar en el navegador (WebGL). Requiere una
+vez:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129
+```
+
+Y después, para generar `web/pkg/` y servirlo:
+
+```bash
+./local-compilar-wasm.sh
+python3 -m http.server -d web 8080   # abrir http://localhost:8080
+```
+
+El HTML de entrada es [`web/index.html`](web/index.html). El código de
+simulación y la UI son los mismos que en escritorio; solo cambia el arranque en
+[`src/main.rs`](src/main.rs) y las fuentes de sistema (en web se embeben dos
+subsets mínimos en `assets/fonts/`).
+
 ---
 
 ## ©️ Licencia

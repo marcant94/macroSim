@@ -9,6 +9,18 @@ egui = "0.32"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+# Dependencias solo para el build web (wasm32). En nativo no se compilan.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "Window",
+    "console",
+] }
+
 [profile.dev]
 opt-level = 0
 debug = 0

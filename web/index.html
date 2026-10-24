@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulador de Política y Economía</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #101418;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    #cargando {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: #c8ced6;
+      font: 16px system-ui, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="cargando">Cargando MacroSim…</div>
+  <canvas id="macrosim_canvas"></canvas>
+
+  <script type="module">
+    import init from "./pkg/simulador_politica.js";
+
+    init()
+      .then(() => document.getElementById("cargando")?.remove())
+      .catch((err) => {
+        console.error("MacroSim: error al cargar el módulo wasm", err);
+        const aviso = document.getElementById("cargando");
+        if (aviso) aviso.textContent = "Error al cargar MacroSim (ver consola).";
+      });
+  </script>
+</body>
+</html>
