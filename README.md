@@ -92,18 +92,24 @@ workflow*). En cada ejecución:
 4. Borra las releases antiguas y conserva solo las **10** últimas
    (`KEEP_RELEASES` en el propio workflow).
 
-Configuración inicial (una sola vez):
+Configuración inicial (una sola vez, en este orden):
 
-1. Crear la rama de publicación: `git push origin main:prod`
-   (el workflow solo se ejecuta donde exista el fichero).
-2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-   Sin esto el job `GitHub Pages` falla (el release no: son jobs independientes).
-   No se puede automatizar: la opción `enablement` de `configure-pages` exige un
-   token con permisos de administración, no el `GITHUB_TOKEN` del workflow.
-3. Solo si el despliegue falla con *"not allowed to deploy to github-pages due to
-   environment protection rules"*: **Settings → Environments → github-pages →
-   Deployment branches** → añadir `prod`. Pasa cuando el entorno ya existía con
-   una regla de rama; si lo crea el propio workflow, nace sin restricciones.
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. **Settings → Environments → github-pages → Deployment branches and tags →
+   Add deployment branch or tag rule** → Ref type **Branch** → `prod`.
+3. Publicar: `git push origin main:prod`.
+
+Al activar Pages, GitHub crea el entorno `github-pages` con una regla que **solo
+permite la rama por defecto** (`main`). Por eso el job de Pages falla con
+*"Branch 'prod' is not allowed to deploy to github-pages due to environment
+protection rules"* hasta que añadas `prod`. Si quieres que solo `prod` pueda
+publicar, borra la regla de `main` de esa misma lista.
+
+Los pasos 1 y 2 no se pueden automatizar desde el workflow: activar Pages exige
+permisos de administración (`enablement` de `configure-pages` no acepta el
+`GITHUB_TOKEN`) y las reglas del entorno son una frontera de seguridad.
+
+Un fallo del job `GitHub Pages` no bloquea el release: son jobs independientes.
 
 Flujo recomendado: desarrollar y probar en `main`; cuando haya una versión
 publicable, `git push origin main:prod`.
