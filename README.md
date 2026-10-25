@@ -97,6 +97,9 @@ Configuración inicial (una sola vez):
 1. Crear la rama de publicación: `git push origin main:prod`
    (el workflow solo se ejecuta donde exista el fichero).
 2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+   Sin esto el job `GitHub Pages` falla (el release no: son jobs independientes).
+   No se puede automatizar: la opción `enablement` de `configure-pages` exige un
+   token con permisos de administración, no el `GITHUB_TOKEN` del workflow.
 3. Solo si el despliegue falla con *"not allowed to deploy to github-pages due to
    environment protection rules"*: **Settings → Environments → github-pages →
    Deployment branches** → añadir `prod`. Pasa cuando el entorno ya existía con

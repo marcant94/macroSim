@@ -163,6 +163,10 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    env:
+      # Este job no hace checkout, así que no hay `.git` y `gh` no puede inferir
+      # el repositorio por sí solo; sin esto falla con "failed to run git".
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/download-artifact@v8
         with:
