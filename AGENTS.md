@@ -52,4 +52,8 @@ src/
   no abras el HTML con `file://`). El target nativo y el web comparten `core/` y `ui/`;
   solo `src/main.rs` tiene dos arranques (`cfg(target_arch = "wasm32")`) y las fuentes
   de sistema se sustituyen por subsets embebidos en `assets/fonts/`.
+- CI/CD: `.github/workflows/release.yml` publica **solo desde la rama `prod`**
+  (Pages + releases con tag `yyyyMMdd-HHmm`, conservando las 10 últimas).
+  `Cargo.lock` se versiona a propósito: fija las dependencias y la versión de
+  `wasm-bindgen-cli` que debe usar CI.
 - Always run `cargo check` (and `clippy`) before finishing changes.

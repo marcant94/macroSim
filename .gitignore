@@ -1,6 +1,5 @@
 /target
 /bin
 **/*.rs.bk
-Cargo.lock
 .DS_Store
 /web/pkg

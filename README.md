@@ -78,6 +78,57 @@ simulación y la UI son los mismos que en escritorio; solo cambia el arranque en
 [`src/main.rs`](src/main.rs) y las fuentes de sistema (en web se embeben dos
 subsets mínimos en `assets/fonts/`).
 
+### Publicación automática (GitHub Actions)
+
+[`.github/workflows/release.yml`](.github/workflows/release.yml) se ejecuta
+**solo al hacer push a la rama `prod`** (o a mano desde *Actions → Release → Run
+workflow*). En cada ejecución:
+
+1. Compila la versión web y la publica en **GitHub Pages**.
+2. Compila los binarios de **Linux x86_64** y **Windows x86_64**.
+3. Crea un *release* con tag `yyyyMMdd-HHmm` (UTC, p. ej. `20251025-1345`) con
+   `macrosim-linux-x86_64-<tag>.tar.gz`, `macrosim-windows-x86_64-<tag>.zip`,
+   `macrosim-web-<tag>.zip` y `SHA256SUMS.txt`.
+4. Borra las releases antiguas y conserva solo las **10** últimas
+   (`KEEP_RELEASES` en el propio workflow).
+
+Configuración inicial (una sola vez):
+
+1. Crear la rama de publicación: `git push origin main:prod`
+   (el workflow solo se ejecuta donde exista el fichero).
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. Solo si el despliegue falla con *"not allowed to deploy to github-pages due to
+   environment protection rules"*: **Settings → Environments → github-pages →
+   Deployment branches** → añadir `prod`. Pasa cuando el entorno ya existía con
+   una regla de rama; si lo crea el propio workflow, nace sin restricciones.
+
+Flujo recomendado: desarrollar y probar en `main`; cuando haya una versión
+publicable, `git push origin main:prod`.
+
+`prod` es una rama normal en el remoto y **no hace falta tenerla en local**:
+`main:prod` significa «sube mi `main` a la rama `prod` de `origin`», y eso dispara
+el workflow igual que un push normal. Dos avisos:
+
+- **No uses `-u`** en ese comando: `-u` dejaría tu `main` local *siguiendo* a
+  `origin/prod` (`git status` compararía contra `prod`), y según tu
+  `push.default` un `git push` sin argumentos acabaría publicando en `prod` o
+  fallando con un error confuso.
+- Si `prod` ya apunta a ese mismo commit, Git responde *"Everything up-to-date"* y
+  **no** se ejecuta nada. Para republicar el mismo commit, lánzalo a mano desde
+  *Actions → Release → Run workflow*.
+
+Un tag no serviría como disparador: el workflow escucha `push` a la **rama**
+`prod` (`on.push.branches`), que además avanza sola con cada publicación; para
+desplegar dos commits distintos necesitarías un tag nuevo cada vez.
+
+Sobre el almacenamiento: en repositorios públicos Actions y Releases no se
+cobran, y no hay límite de tamaño total (solo 2 GiB por fichero y 1000 assets por
+release). Aun así se limita a 10 para no acumular releases eternas.
+
+El binario de Linux se compila en Ubuntu 22.04 (glibc ≥ 2.35) y necesita drivers
+OpenGL; X11/Wayland se cargan en tiempo de ejecución (`dlopen`), así que no hacen
+falta paquetes `-dev` para usarlo.
+
 ---
 
 ## ©️ Licencia

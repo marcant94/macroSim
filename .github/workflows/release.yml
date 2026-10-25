@@ -1,0 +1,223 @@
+name: Release
+
+# Publica solo desde `prod`: nada se compila en main/ramas de trabajo.
+# - Web (WASM) -> GitHub Pages
+# - Binarios Linux + Windows -> GitHub Release con tag yyyyMMdd-HHmm
+#
+# Se puede lanzar a mano desde la pestaña Actions (workflow_dispatch).
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+# Serializa las publicaciones: dos pushes seguidos no se pisan.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: simulador_politica
+  # Releases que se conservan (las más recientes). El resto se borra.
+  KEEP_RELEASES: "10"
+
+jobs:
+  meta:
+    name: Versión
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Calcular versión (yyyyMMdd-HHmm, UTC)
+        id: version
+        run: echo "version=$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
+
+  web:
+    name: Web (WASM)
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+
+      - name: Instalar target wasm32
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Leer versión de wasm-bindgen del Cargo.lock
+        id: wbg
+        run: |
+          version="$(awk '/^name = "wasm-bindgen"$/ {getline; gsub(/[",]/, "", $3); print $3}' Cargo.lock | head -1)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # La CLI debe coincidir con el crate; se instala el binario precompilado.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ steps.wbg.outputs.version }}
+
+      - name: Compilar
+        run: ./local-compilar-wasm.sh --locked
+
+      - name: Empaquetar web (para el release)
+        run: |
+          mkdir -p dist
+          (cd web && zip -qr ../dist/macrosim-web.zip index.html pkg)
+
+      # Artefacto que consume el job `pages`.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-web
+          path: dist/macrosim-web.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux x86_64
+    needs: meta
+    # 22.04 (glibc 2.35) para que el binario corra también en distros antiguas.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux
+
+      - name: Compilar
+        run: cargo build --release --locked
+
+      - name: Empaquetar
+        run: |
+          mkdir -p pkg/macrosim dist
+          cp "target/release/$BIN_NAME" pkg/macrosim/macrosim
+          chmod +x pkg/macrosim/macrosim
+          cp LICENSE README.md pkg/macrosim/
+          tar -C pkg -czf dist/macrosim-linux-x86_64.tar.gz macrosim
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-linux
+          path: dist/macrosim-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows x86_64
+    needs: meta
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows
+
+      - name: Compilar
+        run: cargo build --release --locked
+
+      - name: Empaquetar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "target/release/$env:BIN_NAME.exe", "LICENSE", "README.md" `
+            -DestinationPath "dist/macrosim-windows-x86_64.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-windows
+          path: dist/macrosim-windows-x86_64.zip
+          if-no-files-found: error
+
+  pages:
+    name: GitHub Pages
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5
+
+  release:
+    name: Release
+    # Si falla cualquier build no se publica nada a medias.
+    needs: [meta, web, linux, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Calcular tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          tag="$VERSION"
+          # Dos pushes en el mismo minuto colisionarían: se desempata con el nº de run.
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            tag="$VERSION-$GITHUB_RUN_NUMBER"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Añadir versión a los nombres y checksums
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          mkdir -p out
+          cp dist/macrosim-linux-x86_64.tar.gz "out/macrosim-linux-x86_64-$TAG.tar.gz"
+          cp dist/macrosim-windows-x86_64.zip "out/macrosim-windows-x86_64-$TAG.zip"
+          cp dist/macrosim-web.zip "out/macrosim-web-$TAG.zip"
+          (cd out && sha256sum ./* > SHA256SUMS.txt)
+
+      - name: Crear release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          # --target es obligatorio: sin él, gh etiqueta el HEAD de la rama por
+          # defecto (main), no el commit de `prod` que se acaba de compilar.
+          # `--notes` se antepone a las notas generadas automáticamente.
+          gh release create "$TAG" out/* \
+            --title "$TAG" \
+            --target "$GITHUB_SHA" \
+            --notes "**Web (GitHub Pages):** $PAGES_URL" \
+            --generate-notes
+
+      - name: Borrar releases antiguas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # `gh release list` devuelve de más reciente a más antigua.
+          gh release list --limit 200 --json tagName --jq '.[].tagName' \
+            | grep -E '^[0-9]{8}-[0-9]{4}' \
+            | tail -n "+$((KEEP_RELEASES + 1))" \
+            | while read -r old; do
+                [ -z "$old" ] && continue
+                echo "Borrando release $old"
+                gh release delete "$old" --yes --cleanup-tag
+              done

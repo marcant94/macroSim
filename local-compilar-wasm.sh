@@ -38,7 +38,8 @@ if [[ -n "$VERSION_CRATE" && "$VERSION_CLI" != "$VERSION_CRATE" ]]; then
   exit 1
 fi
 
-cargo build --release --target wasm32-unknown-unknown
+# Argumentos extra para cargo (p. ej. `--locked` en CI).
+cargo build --release --target wasm32-unknown-unknown "$@"
 "$WASM_BINDGEN" \
   --target web \
   --no-typescript \
