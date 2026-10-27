@@ -4,9 +4,6 @@
 //! baja; la **privada** satisface especialmente a las clases media y alta.
 //! El descontento de una clase (cobertura que recibe vs. impuestos que paga)
 //! es la semilla futura de la delincuencia, las huelgas y la fuga de población.
-//
-// NOTA: la API todavía no la consume la UI; allow(dead_code) hasta entonces.
-#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +27,35 @@ impl SocialClass {
             SocialClass::High => 0.25,
         }
     }
+
+    /// Renta relativa de la clase sobre la renta media (1.0 = clase media).
+    pub fn income_weight(self) -> f32 {
+        match self {
+            SocialClass::Low => 0.5,
+            SocialClass::Mid => 1.0,
+            SocialClass::High => 2.5,
+        }
+    }
+
+    /// Cuánto le afecta la fuga de capital: la clase alta es la que se va.
+    pub fn flight_sensitivity(self) -> f32 {
+        match self {
+            SocialClass::Low => 0.0,
+            SocialClass::Mid => 0.2,
+            SocialClass::High => 1.0,
+        }
+    }
+
+    /// Cada cuánto se queja la clase por pagar por encima del tipo neutro.
+    fn tax_discontent_weight(self) -> f32 {
+        // La clase baja es la más sensible a cada punto de IRPF que paga.
+        match self {
+            SocialClass::Low => 0.004,
+            SocialClass::Mid => 0.003,
+            SocialClass::High => 0.002,
+        }
+    }
+
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,7 +73,8 @@ impl Default for DemographicsState {
 }
 
 impl DemographicsState {
-    /// Población aproximada de una clase.
+    /// Población aproximada de una clase (para informes por clase: futuro).
+    #[allow(dead_code)]
     pub fn population_of(&self, class: SocialClass, total: u32) -> u32 {
         let share = match class {
             SocialClass::Low => self.low_share,
@@ -57,9 +84,23 @@ impl DemographicsState {
         (total as f32 * share) as u32
     }
 
-    /// Satisfacción de una clase (0..=1): media ponderada de las coberturas
-    /// pública/privada de todos los servicios.
-    pub fn satisfaction(&self, class: SocialClass, services: &ServicesState, population: u32) -> f32 {
+    /// Cuota de cada clase, en el orden de `SocialClass::ALL`.
+    pub fn class_shares(&self) -> [(SocialClass, f32); 3] {
+        [
+            (SocialClass::Low, self.low_share),
+            (SocialClass::Mid, self.mid_share),
+            (SocialClass::High, self.high_share),
+        ]
+    }
+
+    /// Cobertura que recibe una clase (0..=1): media ponderada de la pública y
+    /// la privada de todos los servicios.
+    pub fn services_satisfaction(
+        &self,
+        class: SocialClass,
+        services: &ServicesState,
+        population: u32,
+    ) -> f32 {
         let w_pub = class.public_weight();
         let w_priv = 1.0 - w_pub;
         let mut acc = 0.0_f32;
@@ -71,11 +112,51 @@ impl DemographicsState {
         acc / ServiceKind::ALL.len() as f32
     }
 
+    /// Descontento fiscal de una clase (0..=0.30): pagar por encima de su tipo
+    /// neutro resta satisfacción. Bajar impuestos no da "satisfacción extra",
+    /// solo evita el castigo (el incentivo para bajar es la migración/inversión).
+    pub fn tax_discontent(&self, class: SocialClass, economy: &EconomyState) -> f32 {
+        let neutral = match class {
+            SocialClass::Low => super::economy::NEUTRAL_INCOME_TAX_LOW,
+            SocialClass::Mid => super::economy::NEUTRAL_INCOME_TAX_MID,
+            SocialClass::High => super::economy::NEUTRAL_INCOME_TAX_HIGH,
+        };
+        let exceso = (economy.income_tax_of(class) - neutral).max(0.0);
+        (exceso * class.tax_discontent_weight()).min(0.30)
+    }
+
+    /// Satisfacción de una clase (0..=1): lo que recibe de los servicios menos
+    /// lo que le duele pagar. Es la semilla de la migración y la delincuencia.
+    pub fn satisfaction(
+        &self,
+        class: SocialClass,
+        services: &ServicesState,
+        population: u32,
+        economy: &EconomyState,
+    ) -> f32 {
+        let cobertura = self.services_satisfaction(class, services, population);
+        (cobertura - self.tax_discontent(class, economy)).clamp(0.0, 1.0)
+    }
+
+    /// Satisfacción media de la población (0..=1), ponderada por el peso de cada
+    /// clase. Es el indicador que mueve la migración en `core::population`.
+    pub fn average_satisfaction(
+        &self,
+        services: &ServicesState,
+        population: u32,
+        economy: &EconomyState,
+    ) -> f32 {
+        self.class_shares()
+            .iter()
+            .map(|(class, share)| share * self.satisfaction(*class, services, population, economy))
+            .sum()
+    }
+
     /// Avanza un mes: el reparto de clases deriva muy lentamente según
     /// satisfacción y economía (subir de clase con buen gobierno; caer con malo).
     pub fn tick(&mut self, services: &ServicesState, economy: &EconomyState) {
         let pop = economy.population;
-        let s_mid = self.satisfaction(SocialClass::Mid, services, pop);
+        let s_mid = self.satisfaction(SocialClass::Mid, services, pop, economy);
 
         // Deriva mensual muy moderada: la movilidad social no es instantánea.
         let mut d_mid = 0.0_f32;
@@ -93,6 +174,8 @@ impl DemographicsState {
         let job_pressure = (economy.unemployment_rate - 8.0).max(0.0) / 100.0;
         d_high -= job_pressure * 0.001;
         d_mid -= job_pressure * 0.002;
+        // Y el tramo alto demasiado alto expulsa a los ricos (fuga de capital).
+        d_high -= economy.capital_flight() * 0.0006;
 
         self.low_share = (self.low_share - d_mid - d_high).clamp(0.05, 0.90);
         self.mid_share = (self.mid_share + d_mid - d_high).clamp(0.05, 0.90);
@@ -106,5 +189,68 @@ impl DemographicsState {
         self.low_share /= total;
         self.mid_share /= total;
         self.high_share /= total;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const POP: u32 = 50_000;
+
+    #[test]
+    fn subir_el_irpf_bajo_enfada_sobre_todo_a_la_clase_baja() {
+        let demo = DemographicsState::default();
+        let services = ServicesState::default();
+        let base = EconomyState::default();
+        let subido = EconomyState {
+            income_tax_low: 40.0,
+            ..EconomyState::default()
+        };
+
+        let low_base = demo.satisfaction(SocialClass::Low, &services, POP, &base);
+        let low_sub = demo.satisfaction(SocialClass::Low, &services, POP, &subido);
+        let high_base = demo.satisfaction(SocialClass::High, &services, POP, &base);
+        let high_sub = demo.satisfaction(SocialClass::High, &services, POP, &subido);
+
+        assert!(low_sub < low_base, "la clase baja debe notar el tramo bajo");
+        assert!(
+            (high_sub - high_base).abs() < 1e-6,
+            "el tramo bajo no debe afectar a la clase alta"
+        );
+    }
+
+    #[test]
+    fn bajar_impuestos_no_da_satisfaccion_extra() {
+        let demo = DemographicsState::default();
+        let services = ServicesState::default();
+        let base = EconomyState::default();
+        let bajo = EconomyState {
+            income_tax_low: 0.0,
+            ..EconomyState::default()
+        };
+        let igual = demo.satisfaction(SocialClass::Low, &services, POP, &base);
+        let barato = demo.satisfaction(SocialClass::Low, &services, POP, &bajo);
+        assert!((igual - barato).abs() < 1e-6);
+    }
+
+    #[test]
+    fn la_fuga_de_capital_reduce_el_peso_de_la_clase_alta() {
+        let services = ServicesState::default();
+        let economy = EconomyState {
+            income_tax_high: 80.0,
+            ..EconomyState::default()
+        };
+        let mut demo = DemographicsState::default();
+        let antes = demo.high_share;
+        for _ in 0..12 {
+            demo.tick(&services, &economy);
+        }
+        assert!(
+            demo.high_share < antes,
+            "con fuga de capital la clase alta debe encogerse ({} → {})",
+            antes,
+            demo.high_share
+        );
     }
 }

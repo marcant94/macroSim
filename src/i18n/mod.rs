@@ -85,3 +85,27 @@ impl I18n {
         text
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    /// Los dos idiomas deben tener exactamente las mismas claves: así una
+    /// traducción nueva no se olvida en ninguno.
+    #[test]
+    fn ambos_idiomas_tienen_las_mismas_claves() {
+        let claves = |json: &str| -> HashSet<String> {
+            serde_json::from_str::<HashMap<String, String>>(json)
+                .expect("locales válidos")
+                .into_keys()
+                .collect()
+        };
+        let es = claves(LOCALES_ES);
+        let en = claves(LOCALES_EN);
+        let solo_es: Vec<_> = es.difference(&en).collect();
+        let solo_en: Vec<_> = en.difference(&es).collect();
+        assert!(solo_es.is_empty(), "claves sin traducir al inglés: {solo_es:?}");
+        assert!(solo_en.is_empty(), "claves sin traducir al español: {solo_en:?}");
+    }
+}

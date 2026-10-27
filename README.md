@@ -8,10 +8,12 @@ El juego es un *dashboard* de gestión puro, al estilo de los informes y paneles
 
 ## 🚀 Características Principales
 
-* **Modelo Macroeconómico:** Presupuesto, impuestos (sociedades e IRPF), gasto público por habitante y desempleo con retroalimentación mensual.
+* **Modelo Macroeconómico:** Presupuesto, IRPF por tramos (bajo/medio/alto) e impuesto de sociedades, gasto público por habitante y desempleo con retroalimentación mensual. Fuga de capital del tramo alto y tipo efectivo de referencia.
 * **Red y Mix Energético:** Capacidad instalada, demanda y precio de la energía; el déficit energético afecta al empleo.
 * **Toma de Decisiones:** Subir/bajar impuestos y gastos en tiempo real y ver las consecuencias en las estadísticas.
-* **Informes y Estadísticas:** Pestañas de Resumen, Economía, Energía e Informes (tabla de los últimos 12 meses y gráficas de evolución).
+* **Servicios Públicos:** Pestaña de Servicios con 8 servicios (sanidad, educación, seguridad, bomberos, cárceles, basuras, carreteras y transporte): construye o demuele capacidad pública pagando capital y mantenimiento, mientras el sector privado cubre parte de la demanda. Todo consume **hectáreas** de suelo limitado.
+* **Población Dinámica:** el marcador del juego. Cada mes la ciudad atrae o pierde habitantes según la satisfacción con los servicios, el empleo y la presión fiscal; el panel muestra el saldo migratorio y su desglose.
+* **Informes y Estadísticas:** Pestañas de Resumen, Servicios, Economía, Energía e Informes (tabla de los últimos 12 meses y gráficas de evolución).
 * **Ligero y Rápido:** `eframe`/`egui` en lugar de un motor 3D completo; compila en minutos y el binario release pesa ~10 MB.
 
 ---

@@ -34,6 +34,18 @@ Todo lo público que construyes/amplías **aumenta también el gasto mensual fij
   Subir el tramo alto da ingresos pero fuga capital; subir el bajo castiga el consumo.
 - Presión fiscal total y tipo efectivo mostrados en el panel económico.
 
+**Implementado** (`core/economy.rs`): dos bases imponibles declaradas como datos —
+renta de los hogares (30/hab·mes, con peso 0,5 / 1,0 / 2,5 según la clase) y
+beneficio empresarial (10/hab·mes). El **tipo efectivo** es la recaudación por
+habitante sobre la renta bruta (23,8 % con los impuestos de partida) y se muestra
+en el panel y en el informe económico junto a ingresos, gastos y balance.
+El **tramo alto** por encima del 35 % genera *fuga de capital* (`capital_flight`,
+0..1) que (a) recorta la recaudación efectiva de esa clase, (b) penaliza la
+inversión privada y (c) reduce el peso de la clase alta mes a mes. Pagar por
+encima del tipo neutro resta satisfacción a cada clase (la baja es la más
+sensible), lo que se traduce en menos población. Por debajo del neutro no hay
+"satisfacción extra": el incentivo es la migración, no la felicidad instantánea.
+
 ### 2.2 Inversión privada vs. pública (decisiones de "cómo")
 Para cada servicio hay que decidir **quién lo presta**:
 - **Público:** tú construyes y mantienes → control total, más gasto mensual.
@@ -59,7 +71,12 @@ Para cada servicio hay que decidir **quién lo presta**:
 
 ### 2.3 Servicios públicos (construcción + mantenimiento)
 Cada servicio se gestiona como: **capacidad instalada (unidades)** vs
-**demanda de la población**, con indicadores de cobertura en las estadísticas:
+**demanda de la población**, con indicadores de cobertura en las estadísticas.
+
+Construir una unidad cuesta **capital al contado** (≈40 meses de mantenimiento) y
+consume **suelo**; el **mantenimiento mensual** es recurrente. Demoler recupera el
+50 % del capital y libera las hectáreas, así que reciclar es siempre más barato que
+ampliar cuando el suelo aprieta.
 
 | Servicio | Indicador de necesidad | Efecto si faltan |
 |---|---|---|
@@ -83,6 +100,14 @@ Crecimiento/descenso mensual en función de:
 - cobertura de sanidad, educación, seguridad y basuras,
 - presión fiscal comparada (fuga/atracción de residentes),
 - vivienda y coste de vida (futuro cercano).
+
+Implementado en `core/population.rs`: cada mes se aplica una **tasa neta de
+migración** compuesta por tres términos (servicios → satisfacción media de la
+población, empleo → desempleo frente al neutro y fiscalidad → presión fiscal
+frente a la de referencia), acotada a ±2 % / +1,5 % mensual para que ningún
+factor genere espirales. Los puntos neutros están calibrados para que la partida
+inicial quede en equilibrio: **lo que mueve la población es lo que hace el
+jugador**, no el paso del tiempo.
 
 ### 2.6 Límite de suelo (hectáreas)
 Como en los juegos de ciudad, **no se puede construir infinitamente**: la
@@ -135,6 +160,7 @@ src/core/
 ├── services.rs       # Registro genérico de servicios (el patrón clave)
 ├── land.rs           # Límite de hectáreas y consumo de suelo
 ├── demographics.rs   # Clases sociales, satisfacción y movilidad
+├── population.rs     # Migración mensual (servicios, empleo e impuestos)
 ├── economy.rs        # Presupuesto (incluye gasto recurrente de servicios)
 ├── energy.rs         # Red eléctrica
 ├── settings.rs       # Idioma/moneda
@@ -157,9 +183,9 @@ energía → calendario → histórico.
 
 ## 6. Prioridad de implementación sugerida
 
-1. Impuestos por tramos + indicadores de fuga/inversión privada.
-2. UI del panel de servicios: construir unidades (respetando `LandState::can_build`), ver cobertura pública/privada y hectáreas libres.
-3. Población dinámica ligada a servicios + empleo.
+1. ✅ **Hecho** — Impuestos por tramos + indicadores de fuga/inversión privada (y balance de ingresos/gastos recalibrado).
+2. ✅ **Hecho** — UI del panel de servicios: construir/demoler unidades (respetando `LandState::can_build` y el presupuesto), ver cobertura pública/privada y hectáreas libres.
+3. ✅ **Hecho** — Población dinámica ligada a servicios + empleo (migración mensual con desglose visible).
 4. Delincuencia + seguridad (comisarías, policía).
 5. Basuras/reciclaje y bomberos.
 6. Carreteras: construir vs mantener vs privatizar.

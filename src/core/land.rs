@@ -4,10 +4,6 @@
 //! unidad de servicio, la red eléctrica y (en el futuro) viviendas e industria
 //! consumen suelo. La expansión territorial (conquista/compra) es una
 //! decisión de Fase 3/4 y solo aumentará `total_hectareas`.
-//
-// NOTA: la API todavía no la consume la UI; se marca el módulo con
-// allow(dead_code) hasta cablear el panel de suelo.
-#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 

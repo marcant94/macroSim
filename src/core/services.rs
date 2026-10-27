@@ -7,10 +7,6 @@
 //! Nada más: cobertura, gasto mensual, crecimiento del sector privado y consumo
 //! de suelo se calculan en bucles genéricos sobre el registro. Ninguna otra
 //! parte del código necesita conocer los servicios uno a uno.
-//
-// NOTA: parte de la API pública todavía no la consume la UI (fase siguiente);
-// se marcan con allow(dead_code) para mantener el esqueleto completo.
-#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 
@@ -57,20 +53,46 @@ impl ServiceKind {
     }
 
     /// Configuración (balance) del servicio. Datos, no lógica.
+    ///
+    /// `capital` ronda 40 meses de `upkeep`: construir es una inversión que se
+    /// amortiza en algo más de tres años de juego.
     pub fn spec(self) -> ServiceSpec {
         match self {
-            //                 demanda   upkeep   suelo    drive
-            //                 /1000 hab /unidad  (ha)     (privado)
-            ServiceKind::Health => ServiceSpec::new(4.0, 600.0, 1.5, 0.40),
-            ServiceKind::Education => ServiceSpec::new(20.0, 60.0, 0.4, 0.35),
-            ServiceKind::Security => ServiceSpec::new(0.5, 900.0, 0.5, 0.05),
-            ServiceKind::Fire => ServiceSpec::new(0.2, 1500.0, 0.8, 0.05),
-            ServiceKind::Prisons => ServiceSpec::new(0.8, 700.0, 2.0, 0.02),
-            ServiceKind::Waste => ServiceSpec::new(0.5, 600.0, 3.0, 0.20),
-            ServiceKind::Roads => ServiceSpec::new(2.0, 100.0, 0.2, 0.30),
-            ServiceKind::Transport => ServiceSpec::new(1.0, 120.0, 0.5, 0.25),
+            //                 demanda   upkeep  capital   suelo    drive
+            //                 /1000 hab /unidad /unidad   (ha)     (privado)
+            ServiceKind::Health => ServiceSpec::new(4.0, 600.0, 24_000.0, 1.5, 0.40),
+            ServiceKind::Education => ServiceSpec::new(20.0, 60.0, 2_400.0, 0.4, 0.35),
+            ServiceKind::Security => ServiceSpec::new(0.5, 900.0, 36_000.0, 0.5, 0.05),
+            ServiceKind::Fire => ServiceSpec::new(0.2, 1_500.0, 60_000.0, 0.8, 0.05),
+            ServiceKind::Prisons => ServiceSpec::new(0.8, 700.0, 28_000.0, 2.0, 0.02),
+            ServiceKind::Waste => ServiceSpec::new(0.5, 600.0, 24_000.0, 3.0, 0.20),
+            ServiceKind::Roads => ServiceSpec::new(2.0, 100.0, 4_000.0, 0.2, 0.30),
+            ServiceKind::Transport => ServiceSpec::new(1.0, 120.0, 4_800.0, 0.5, 0.25),
         }
     }
+
+    /// Clave i18n con el nombre del servicio (la UI no conoce textos literales).
+    pub fn name_key(self) -> &'static str {
+        match self {
+            ServiceKind::Health => "services.kind.health",
+            ServiceKind::Education => "services.kind.education",
+            ServiceKind::Security => "services.kind.security",
+            ServiceKind::Fire => "services.kind.fire",
+            ServiceKind::Prisons => "services.kind.prisons",
+            ServiceKind::Waste => "services.kind.waste",
+            ServiceKind::Roads => "services.kind.roads",
+            ServiceKind::Transport => "services.kind.transport",
+        }
+    }
+}
+
+/// Fracción del capital que se recupera al demoler (venta de instalaciones).
+pub const DEMOLISH_REFUND: f32 = 0.5;
+
+/// Unidades que se construyen o demuelen por clic: ~5 % de la demanda actual,
+/// de modo que el paso crece con la población y nunca es 0.
+pub fn unit_step(kind: ServiceKind, population: u32) -> f32 {
+    (ServicesState::demand(kind, population) * 0.05).max(1.0).round()
 }
 
 /// Configuración estática de un servicio (unidades arbitrarias por servicio:
@@ -82,6 +104,8 @@ pub struct ServiceSpec {
     /// Gasto mensual recurrente (salarios + mantenimiento) por unidad pública.
     /// El sector privado se autofinancia: no genera gasto público.
     pub upkeep_per_unit: f32,
+    /// Coste único de construir una unidad pública (inversión de capital).
+    pub capital_cost_per_unit: f32,
     /// Hectáreas de suelo que ocupa cada unidad.
     pub land_per_unit: f32,
     /// Propensión del sector privado a cubrir demanda insatisfecha (0..=1).
@@ -91,10 +115,11 @@ pub struct ServiceSpec {
 }
 
 impl ServiceSpec {
-    const fn new(demand: f32, upkeep: f32, land: f32, drive: f32) -> Self {
+    const fn new(demand: f32, upkeep: f32, capital: f32, land: f32, drive: f32) -> Self {
         Self {
             demand_per_1000: demand,
             upkeep_per_unit: upkeep,
+            capital_cost_per_unit: capital,
             land_per_unit: land,
             private_drive: drive,
         }
@@ -113,10 +138,13 @@ pub struct ServiceState {
 }
 
 /// Clima de inversión privada (0..=1): impuestos bajos y empleo sano atraen capital.
+/// La fuga de capital del tramo alto también lo penaliza: el dinero que se va
+/// no invierte aquí.
 pub fn investment_climate(economy: &EconomyState) -> f32 {
     let tax_ok = 1.0 - economy.corporate_tax / 100.0; // 0..1
     let jobs_ok = 1.0 - economy.unemployment_rate / 100.0; // 0..1
-    (tax_ok * 0.6 + jobs_ok * 0.4).clamp(0.0, 1.0)
+    let base = tax_ok * 0.6 + jobs_ok * 0.4;
+    (base * (1.0 - 0.6 * economy.capital_flight())).clamp(0.0, 1.0)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,11 +222,18 @@ impl ServicesState {
             st.private_units += uncovered * spec.private_drive * climate * 0.05;
             st.private_units = st.private_units.min(demand);
 
-            let total = st.public_units + st.private_units;
-            st.coverage = (total / demand.max(1e-6)).min(1.0);
-
             upkeep += (st.public_units * spec.upkeep_per_unit) as f64;
         }
+        self.recompute_coverage(population);
         upkeep
+    }
+
+    /// Recalcula `coverage` desde la capacidad actual sin avanzar el mes.
+    /// La UI lo usa para reflejar al instante lo construido/demolido (también en pausa).
+    pub fn recompute_coverage(&mut self, population: u32) {
+        for (st, kind) in self.services.iter_mut().zip(ServiceKind::ALL) {
+            let demand = Self::demand(kind, population).max(1e-6);
+            st.coverage = ((st.public_units + st.private_units) / demand).min(1.0);
+        }
     }
 }
