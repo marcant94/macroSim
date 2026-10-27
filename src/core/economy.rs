@@ -26,6 +26,13 @@ pub const NEUTRAL_INCOME_TAX_HIGH: f32 = 25.0;
 /// Tramo alto a partir del cual empieza la fuga de capital (%).
 pub const HIGH_TAX_COMFORT: f32 = 35.0;
 
+/// Años de recaudación que el mercado está dispuesto a prestar (límite de crédito).
+pub const CREDIT_YEARS: f64 = 2.0;
+/// Interés base mensual con la deuda a cero (≈4,3 % anual).
+pub const BASE_INTEREST_RATE: f32 = 0.0035;
+/// Prima de riesgo máxima que se suma al llegar al límite de crédito.
+pub const MAX_RISK_PREMIUM: f32 = 0.02;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EconomyState {
     pub money: f64,
@@ -43,6 +50,17 @@ pub struct EconomyState {
     /// `default` por compatibilidad con partidas antiguas.
     #[serde(default)]
     pub service_upkeep: f64,
+    /// Deuda acumulada: el déficit se financia sola y el jugador puede pedir
+    /// préstamos o amortizar. Superar el límite de crédito = quiebra.
+    #[serde(default)]
+    pub debt: f64,
+    /// Mantenimiento mensual de las centrales eléctricas (lo calcula
+    /// `EnergyState::monthly_upkeep`).
+    #[serde(default)]
+    pub energy_upkeep: f64,
+    /// Coste sanitario de las emisiones del mix eléctrico del mes.
+    #[serde(default)]
+    pub pollution_cost: f64,
 }
 
 impl Default for EconomyState {
@@ -57,6 +75,9 @@ impl Default for EconomyState {
             income_tax_high: NEUTRAL_INCOME_TAX_HIGH,
             public_spending: 2.0,
             service_upkeep: 0.0,
+            debt: 0.0,
+            energy_upkeep: 0.0,
+            pollution_cost: 0.0,
         }
     }
 }
@@ -133,21 +154,68 @@ impl EconomyState {
         self.population as f64 * self.revenue_per_capita(demographics) as f64
     }
 
-    /// Gasto mensual: gasto por habitante x población + mantenimiento de
-    /// los servicios públicos (clínicas, comisarías, basuras…).
-    pub fn monthly_expenses(&self) -> f64 {
-        self.population as f64 * self.public_spending as f64 + self.service_upkeep
+    /// Deuda máxima que el mercado acepta: dos años de recaudación.
+    pub fn credit_limit(&self, demographics: &DemographicsState) -> f64 {
+        self.monthly_income(demographics) * 12.0 * CREDIT_YEARS
+    }
+
+    /// Deuda sobre el límite de crédito (1.0 = al borde de la quiebra).
+    pub fn debt_ratio(&self, demographics: &DemographicsState) -> f32 {
+        let limit = self.credit_limit(demographics);
+        if limit <= 0.0 {
+            1.0
+        } else {
+            (self.debt / limit) as f32
+        }
+    }
+
+    /// Interés mensual aplicado a la deuda: sube con la prima de riesgo.
+    pub fn interest_rate(&self, demographics: &DemographicsState) -> f32 {
+        let riesgo = self.debt_ratio(demographics).clamp(0.0, 1.0);
+        BASE_INTEREST_RATE + MAX_RISK_PREMIUM * riesgo * riesgo
+    }
+
+    /// Intereses que se pagan este mes por la deuda viva.
+    pub fn monthly_interest(&self, demographics: &DemographicsState) -> f64 {
+        self.debt * self.interest_rate(demographics) as f64
+    }
+
+    /// Quiebra: la deuda supera lo que el mercado está dispuesto a financiar.
+    pub fn is_bankrupt(&self, demographics: &DemographicsState) -> bool {
+        self.debt > self.credit_limit(demographics)
+    }
+
+    /// Crédito disponible antes de la quiebra.
+    pub fn available_credit(&self, demographics: &DemographicsState) -> f64 {
+        (self.credit_limit(demographics) - self.debt).max(0.0)
+    }
+
+    /// Gasto mensual: gasto por habitante x población + mantenimiento de los
+    /// servicios públicos + mantenimiento eléctrico + coste de emisiones +
+    /// intereses de la deuda.
+    pub fn monthly_expenses(&self, demographics: &DemographicsState) -> f64 {
+        self.population as f64 * self.public_spending as f64
+            + self.service_upkeep
+            + self.energy_upkeep
+            + self.pollution_cost
+            + self.monthly_interest(demographics)
     }
 
     /// Balance mensual (ingresos - gastos). Negativo = déficit.
     pub fn monthly_balance(&self, demographics: &DemographicsState) -> f64 {
-        self.monthly_income(demographics) - self.monthly_expenses()
+        self.monthly_income(demographics) - self.monthly_expenses(demographics)
     }
 
     /// Avanza la economía un mes.
     /// `energy_deficit` indica si la demanda energética superó la capacidad el mes pasado.
     pub fn tick(&mut self, demographics: &DemographicsState, energy_deficit: bool) {
         self.money += self.monthly_balance(demographics);
+        // Sin caja, el déficit se financia emitiendo deuda: la tesorería nunca
+        // queda en negativo, pero la deuda crece y con ella los intereses.
+        if self.money < 0.0 {
+            self.debt -= self.money;
+            self.money = 0.0;
+        }
 
         // El déficit energético castiga el empleo; con capacidad suficiente,
         // el paro tiende lentamente hacia un mínimo estructural del 3%.

@@ -48,7 +48,7 @@ src/
 ### 3. Build & Verify
 - Dev run: `cargo run` (fast; ~1-2 GB `target/`, vs 5-8 GB with Bevy)
 - Release: `cargo run --release` (`lto = true`, `strip = true`, binary ~10 MB)
-- Web/WASM: `./local-compilar-wasm.sh` → genera `web/pkg/` (sirve `web/` por HTTP,
+- Web/WASM: `./wf-compilar-wasm.sh` → genera `web/pkg/` (sirve `web/` por HTTP,
   no abras el HTML con `file://`). El target nativo y el web comparten `core/` y `ui/`;
   solo `src/main.rs` tiene dos arranques (`cfg(target_arch = "wasm32")`) y las fuentes
   de sistema se sustituyen por subsets embebidos en `assets/fonts/`.

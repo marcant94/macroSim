@@ -9,11 +9,14 @@ El juego es un *dashboard* de gestión puro, al estilo de los informes y paneles
 ## 🚀 Características Principales
 
 * **Modelo Macroeconómico:** Presupuesto, IRPF por tramos (bajo/medio/alto) e impuesto de sociedades, gasto público por habitante y desempleo con retroalimentación mensual. Fuga de capital del tramo alto y tipo efectivo de referencia.
-* **Red y Mix Energético:** Capacidad instalada, demanda y precio de la energía; el déficit energético afecta al empleo.
+* **Mix Energético:** ocho fuentes (carbón, petróleo, gas, nuclear, geotérmica, eólica, solar e hidráulica) que compras **por instalaciones**, cada una con su tamaño. La tabla muestra cuántas plantas tienes, los MW instalados frente a los efectivos, lo que cuesta construir y mantener una, lo que produce, su suelo y sus emisiones; la demanda crece con la población y el déficit energético afecta al empleo. El factor de carga es la media anual; la producción cambia cada mes (sol en verano, viento en invierno, hidráulica en primavera) mientras las térmicas son gestionables.
 * **Toma de Decisiones:** Subir/bajar impuestos y gastos en tiempo real y ver las consecuencias en las estadísticas.
 * **Servicios Públicos:** Pestaña de Servicios con 8 servicios (sanidad, educación, seguridad, bomberos, cárceles, basuras, carreteras y transporte): construye o demuele capacidad pública pagando capital y mantenimiento, mientras el sector privado cubre parte de la demanda. Todo consume **hectáreas** de suelo limitado.
-* **Población Dinámica:** el marcador del juego. Cada mes la ciudad atrae o pierde habitantes según la satisfacción con los servicios, el empleo y la presión fiscal; el panel muestra el saldo migratorio y su desglose.
+* **Población Dinámica:** el marcador del juego. Cada mes la ciudad atrae o pierde habitantes según la satisfacción con los servicios, el empleo, la presión fiscal y la inseguridad; el panel muestra el saldo migratorio y su desglose.
+* **Deuda y Quiebra:** la caja nunca queda en negativo: el déficit se financia con deuda. Pide préstamos o amortiza desde el panel de deuda; los intereses suben con el riesgo y superar el límite de crédito es la quiebra (inversión hundida, delincuencia al alza y éxodo de población).
+* **Delincuencia Emergente:** no es un slider: sube con el paro, la exclusión social y la quiebra, y baja con policía, educación y cárceles. Castiga la satisfacción, espanta la inversión privada y expulsa población.
 * **Informes y Estadísticas:** Pestañas de Resumen, Servicios, Economía, Energía e Informes (tabla de los últimos 12 meses y gráficas de evolución).
+* **Configurable:** cuatro paletas de color (Oscuro, Claro, Sepia, Azul noche) e idioma español/inglés desde Configuración, con la versión del build en la esquina inferior.
 * **Ligero y Rápido:** `eframe`/`egui` en lugar de un motor 3D completo; compila en minutos y el binario release pesa ~10 MB.
 
 ---
@@ -71,7 +74,7 @@ cargo install wasm-bindgen-cli --version 0.2.129
 Y después, para generar `web/pkg/` y servirlo:
 
 ```bash
-./local-compilar-wasm.sh
+./wf-compilar-wasm.sh
 python3 -m http.server -d web 8080   # abrir http://localhost:8080
 ```
 

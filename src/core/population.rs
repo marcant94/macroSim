@@ -10,6 +10,8 @@
 //!   los atrae.
 //! - **Presión fiscal**: subir impuestos por encima de la referencia ahuyenta
 //!   residentes; bajarlos los atrae (pero reduce ingresos).
+//! - **Inseguridad**: la delincuencia empuja a la gente a irse (además de
+//!   restar satisfacción, que ya entra por el primer factor).
 //!
 //! La tasa está acotada para que ningún factor pueda provocar espirales
 //! incontrolables: la demografía se mueve despacio, como en la realidad.
@@ -32,6 +34,8 @@ const JOBS_SLOPE: f32 = 0.0006;
 /// Un +100 % de carga fiscal (el doble de recaudación por habitante) resta
 /// 0,6 puntos porcentuales de población al mes.
 const TAXES_SLOPE: f32 = 0.006;
+/// Con la delincuencia al máximo, la ciudad pierde 0,6 % de población al mes.
+const CRIME_SLOPE: f32 = 0.006;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PopulationState {
@@ -54,6 +58,8 @@ pub struct PopulationOutlook {
     pub from_jobs: f32,
     /// Aportación de la presión fiscal.
     pub from_taxes: f32,
+    /// Aportación de la inseguridad.
+    pub from_crime: f32,
 }
 
 impl PopulationState {
@@ -67,12 +73,15 @@ impl PopulationState {
         demographics: &DemographicsState,
         services: &ServicesState,
         economy: &EconomyState,
+        crime_pressure: f32,
     ) -> PopulationOutlook {
-        let satisfaction = demographics.average_satisfaction(services, economy.population, economy);
+        let satisfaction =
+            demographics.average_satisfaction(services, economy.population, economy, crime_pressure);
         let from_services = (satisfaction - NEUTRAL_SATISFACTION) * SERVICES_SLOPE;
         let from_jobs = (NEUTRAL_UNEMPLOYMENT - economy.unemployment_rate) * JOBS_SLOPE;
         let from_taxes = -economy.tax_burden(demographics) * TAXES_SLOPE;
-        let net_rate = (from_services + from_jobs + from_taxes)
+        let from_crime = -crime_pressure.clamp(0.0, 1.0) * CRIME_SLOPE;
+        let net_rate = (from_services + from_jobs + from_taxes + from_crime)
             .clamp(Self::MIN_RATE, Self::MAX_RATE);
 
         PopulationOutlook {
@@ -81,6 +90,7 @@ impl PopulationState {
             from_services,
             from_jobs,
             from_taxes,
+            from_crime,
         }
     }
 
@@ -90,8 +100,9 @@ impl PopulationState {
         demographics: &DemographicsState,
         services: &ServicesState,
         economy: &mut EconomyState,
+        crime_pressure: f32,
     ) -> PopulationOutlook {
-        let outlook = self.outlook(demographics, services, economy);
+        let outlook = self.outlook(demographics, services, economy, crime_pressure);
         let next = (economy.population as f32 * (1.0 + outlook.net_rate))
             .round()
             .clamp(0.0, u32::MAX as f32);
@@ -163,7 +174,7 @@ mod tests {
         }
         let outlook = sim
             .population
-            .outlook(&sim.demographics, &sim.services, &sim.economy);
+            .outlook(&sim.demographics, &sim.services, &sim.economy, sim.crime.pressure());
         assert!(outlook.net_rate >= PopulationState::MIN_RATE);
         assert!(outlook.net_rate <= PopulationState::MAX_RATE);
     }

@@ -138,13 +138,15 @@ pub struct ServiceState {
 }
 
 /// Clima de inversión privada (0..=1): impuestos bajos y empleo sano atraen capital.
-/// La fuga de capital del tramo alto también lo penaliza: el dinero que se va
-/// no invierte aquí.
-pub fn investment_climate(economy: &EconomyState) -> f32 {
+/// La fuga de capital del tramo alto y la inseguridad también lo penalizan: el
+/// dinero que se va no invierte aquí, y el que se queda no arriesga.
+pub fn investment_climate(economy: &EconomyState, crime_pressure: f32) -> f32 {
     let tax_ok = 1.0 - economy.corporate_tax / 100.0; // 0..1
     let jobs_ok = 1.0 - economy.unemployment_rate / 100.0; // 0..1
     let base = tax_ok * 0.6 + jobs_ok * 0.4;
-    (base * (1.0 - 0.6 * economy.capital_flight())).clamp(0.0, 1.0)
+    let sin_fuga = 1.0 - 0.6 * economy.capital_flight();
+    let sin_inseguridad = 1.0 - 0.45 * crime_pressure.clamp(0.0, 1.0);
+    (base * sin_fuga * sin_inseguridad).clamp(0.0, 1.0)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

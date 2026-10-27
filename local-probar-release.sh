@@ -1,1 +1,0 @@
-./bin/simulador_politica

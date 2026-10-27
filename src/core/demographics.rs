@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 use super::economy::EconomyState;
 use super::services::{ServiceKind, ServicesState};
 
+/// Cuánta satisfacción resta la delincuencia con presión social máxima.
+pub const CRIME_SATISFACTION_WEIGHT: f32 = 0.30;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SocialClass {
     Low,
@@ -125,17 +128,23 @@ impl DemographicsState {
         (exceso * class.tax_discontent_weight()).min(0.30)
     }
 
-    /// Satisfacción de una clase (0..=1): lo que recibe de los servicios menos
-    /// lo que le duele pagar. Es la semilla de la migración y la delincuencia.
+    /// Satisfacción de una clase (0..=1): lo que recibe de los servicios, menos
+    /// lo que le duele pagar y lo que sufre la inseguridad. Es la semilla de la
+    /// migración y, a la vez, de la propia delincuencia.
+    ///
+    /// `crime_pressure` (0..=1) lo calcula `core::crime`; se pasa como número
+    /// para que este módulo no dependa del de delincuencia.
     pub fn satisfaction(
         &self,
         class: SocialClass,
         services: &ServicesState,
         population: u32,
         economy: &EconomyState,
+        crime_pressure: f32,
     ) -> f32 {
         let cobertura = self.services_satisfaction(class, services, population);
-        (cobertura - self.tax_discontent(class, economy)).clamp(0.0, 1.0)
+        let inseguridad = crime_pressure.clamp(0.0, 1.0) * CRIME_SATISFACTION_WEIGHT;
+        (cobertura - self.tax_discontent(class, economy) - inseguridad).clamp(0.0, 1.0)
     }
 
     /// Satisfacción media de la población (0..=1), ponderada por el peso de cada
@@ -145,18 +154,21 @@ impl DemographicsState {
         services: &ServicesState,
         population: u32,
         economy: &EconomyState,
+        crime_pressure: f32,
     ) -> f32 {
         self.class_shares()
             .iter()
-            .map(|(class, share)| share * self.satisfaction(*class, services, population, economy))
+            .map(|(class, share)| {
+                share * self.satisfaction(*class, services, population, economy, crime_pressure)
+            })
             .sum()
     }
 
     /// Avanza un mes: el reparto de clases deriva muy lentamente según
     /// satisfacción y economía (subir de clase con buen gobierno; caer con malo).
-    pub fn tick(&mut self, services: &ServicesState, economy: &EconomyState) {
+    pub fn tick(&mut self, services: &ServicesState, economy: &EconomyState, crime_pressure: f32) {
         let pop = economy.population;
-        let s_mid = self.satisfaction(SocialClass::Mid, services, pop, economy);
+        let s_mid = self.satisfaction(SocialClass::Mid, services, pop, economy, crime_pressure);
 
         // Deriva mensual muy moderada: la movilidad social no es instantánea.
         let mut d_mid = 0.0_f32;
@@ -208,10 +220,10 @@ mod tests {
             ..EconomyState::default()
         };
 
-        let low_base = demo.satisfaction(SocialClass::Low, &services, POP, &base);
-        let low_sub = demo.satisfaction(SocialClass::Low, &services, POP, &subido);
-        let high_base = demo.satisfaction(SocialClass::High, &services, POP, &base);
-        let high_sub = demo.satisfaction(SocialClass::High, &services, POP, &subido);
+        let low_base = demo.satisfaction(SocialClass::Low, &services, POP, &base, 0.0);
+        let low_sub = demo.satisfaction(SocialClass::Low, &services, POP, &subido, 0.0);
+        let high_base = demo.satisfaction(SocialClass::High, &services, POP, &base, 0.0);
+        let high_sub = demo.satisfaction(SocialClass::High, &services, POP, &subido, 0.0);
 
         assert!(low_sub < low_base, "la clase baja debe notar el tramo bajo");
         assert!(
@@ -229,8 +241,8 @@ mod tests {
             income_tax_low: 0.0,
             ..EconomyState::default()
         };
-        let igual = demo.satisfaction(SocialClass::Low, &services, POP, &base);
-        let barato = demo.satisfaction(SocialClass::Low, &services, POP, &bajo);
+        let igual = demo.satisfaction(SocialClass::Low, &services, POP, &base, 0.0);
+        let barato = demo.satisfaction(SocialClass::Low, &services, POP, &bajo, 0.0);
         assert!((igual - barato).abs() < 1e-6);
     }
 
@@ -244,7 +256,7 @@ mod tests {
         let mut demo = DemographicsState::default();
         let antes = demo.high_share;
         for _ in 0..12 {
-            demo.tick(&services, &economy);
+            demo.tick(&services, &economy, 0.0);
         }
         assert!(
             demo.high_share < antes,

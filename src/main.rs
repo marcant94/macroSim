@@ -4,6 +4,13 @@ mod ui;
 
 use ui::MacroSimApp;
 
+/// Versión que se muestra en la esquina inferior. CI inyecta el tag del release
+/// (`yyyyMMdd-HHmm`); en compilaciones locales se usa la versión del crate.
+pub const VERSION: &str = match option_env!("MACROSIM_VERSION") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -120,15 +127,33 @@ fn setup_fonts(ctx: &egui::Context) {
         }
     }
 
+    anadir_subsets(&mut fonts);
     ctx.set_fonts(fonts);
 }
 
-/// En web no hay sistema de ficheros que leer: además de las fuentes
-/// embebidas en egui, se añaden dos subsets mínimos de Noto (OFL, ver
-/// `assets/fonts/OFL.txt`) para los glifos que no cubren: `₿` y `🏛️`.
-#[cfg(target_arch = "wasm32")]
-fn setup_fonts(ctx: &egui::Context) {
-    use egui::{FontData, FontDefinitions, FontFamily};
+/// Subsets embebidos (OFL, ver `assets/fonts/OFL.txt`) para los glifos que las
+/// fuentes de egui no cubren: `₿` y `🏛️`.
+///
+/// En web no hay sistema de ficheros, así que estas dos fuentes **más** las que
+/// embarca egui (Ubuntu-Light, NotoEmoji y emoji-icon-font) son todo lo que hay:
+/// cualquier emoji que no esté en ellas sale como un cuadradito. El test
+/// `ui::tests::ningun_icono_se_queda_sin_glifo_en_el_build_web` comprueba que
+/// todos los textos de la UI se pueden dibujar con exactamente este juego.
+/// Solo la usan el arranque web y los tests: en escritorio hay fuentes del
+/// sistema y esta función existiría sin llamarse.
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+pub(crate) fn fuentes_embebidas(ctx: &egui::Context) {
+    use egui::FontDefinitions;
+
+    let mut fonts = FontDefinitions::default();
+    anadir_subsets(&mut fonts);
+    ctx.set_fonts(fonts);
+}
+
+/// Añade al final de cada familia los dos subsets propios, de modo que actúen
+/// como último recurso (`₿`, `🏛️`) si ninguna otra fuente los tiene.
+fn anadir_subsets(fonts: &mut egui::FontDefinitions) {
+    use egui::{FontData, FontFamily};
 
     const EXTRA: [(&str, &[u8]); 2] = [
         (
@@ -141,7 +166,6 @@ fn setup_fonts(ctx: &egui::Context) {
         ),
     ];
 
-    let mut fonts = FontDefinitions::default();
     for (name, data) in EXTRA {
         fonts
             .font_data
@@ -154,5 +178,10 @@ fn setup_fonts(ctx: &egui::Context) {
                 .push(name.to_owned());
         }
     }
-    ctx.set_fonts(fonts);
+}
+
+/// En web no hay sistema de ficheros que leer: solo las fuentes embebidas.
+#[cfg(target_arch = "wasm32")]
+fn setup_fonts(ctx: &egui::Context) {
+    fuentes_embebidas(ctx);
 }

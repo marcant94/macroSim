@@ -10,9 +10,6 @@ use serde::{Deserialize, Serialize};
 use super::energy::EnergyState;
 use super::services::{ServiceKind, ServicesState};
 
-/// Suelo que ocupa cada MW de capacidad eléctrica instalada.
-pub const ENERGY_LAND_PER_MW: f32 = 0.02;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LandState {
     /// Hectáreas totales gobernable. Solo crece con expansión territorial.
@@ -21,8 +18,13 @@ pub struct LandState {
 
 impl Default for LandState {
     fn default() -> Self {
-        // Ciudad-estado inicial de tamaño modesto.
-        Self { total_hectareas: 2000.0 }
+        // Ciudad-estado inicial: 4.000 ha (40 km²). La partida arranca usando
+        // ~19 %, para que el suelo sea una restricción de medio plazo y no un
+        // muro desde el primer año; agotarlo obliga a reciclar, densificar o
+        // expandirse (Fase 3/4: compra/conquista de territorio).
+        Self {
+            total_hectareas: 4_000.0,
+        }
     }
 }
 
@@ -38,9 +40,10 @@ impl LandState {
             .sum()
     }
 
-    /// Suelo ocupado por la red eléctrica instalada.
+    /// Suelo ocupado por las centrales eléctricas (cada fuente tiene su
+    /// consumo por MW: una hidráulica ocupa mucho más que un ciclo combinado).
     pub fn used_by_energy(&self, energy: &EnergyState) -> f32 {
-        energy.capacity_mw * ENERGY_LAND_PER_MW
+        energy.land_hectareas()
     }
 
     /// Suelo total ocupado (servicios + energía; vivienda/industria: futuro).

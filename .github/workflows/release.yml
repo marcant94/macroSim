@@ -63,8 +63,15 @@ jobs:
         with:
           tool: wasm-bindgen@${{ steps.wbg.outputs.version }}
 
+      # Se fuerza recompilar el crate para que la versión del release quede
+      # embebida: `option_env!` no hace que cargo invalide la caché.
+      - name: Fijar versión embebida
+        run: touch src/main.rs
+
       - name: Compilar
-        run: ./local-compilar-wasm.sh --locked
+        env:
+          MACROSIM_VERSION: ${{ needs.meta.outputs.version }}
+        run: ./wf-compilar-wasm.sh --locked
 
       - name: Empaquetar web (para el release)
         run: |
@@ -95,7 +102,12 @@ jobs:
         with:
           key: linux
 
+      - name: Fijar versión embebida
+        run: touch src/main.rs
+
       - name: Compilar
+        env:
+          MACROSIM_VERSION: ${{ needs.meta.outputs.version }}
         run: cargo build --release --locked
 
       - name: Empaquetar
@@ -124,7 +136,12 @@ jobs:
         with:
           key: windows
 
+      - name: Fijar versión embebida
+        run: touch src/main.rs
+
       - name: Compilar
+        env:
+          MACROSIM_VERSION: ${{ needs.meta.outputs.version }}
         run: cargo build --release --locked
 
       - name: Empaquetar

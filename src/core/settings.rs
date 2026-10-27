@@ -58,21 +58,21 @@ impl Currency {
     /// Formatea una cantidad con 2 decimales:
     /// español `14.000.000,00 ₿` / inglés `₿14,000,000.00`.
     pub fn format_money(&self, amount: f64) -> String {
-        let sign = if amount < 0.0 { "-" } else { "" };
-        let s = format!("{:.2}", amount.abs());
+        // Se redondea antes de decidir el signo: -0,004 no debe salir como "-0".
+        let redondeado = (amount.abs() * 100.0).round() / 100.0;
+        let sign = if amount < 0.0 && redondeado > 0.0 {
+            "-"
+        } else {
+            ""
+        };
+        let s = format!("{:.2}", redondeado);
         let (int_part, frac_part) = match s.split_once('.') {
             Some((int, frac)) => (int.to_owned(), frac.to_owned()),
             None => (s, String::new()),
         };
-        let digits = int_part.len();
-        let mut grouped = String::with_capacity(digits + digits / 3);
-        for (idx, c) in int_part.chars().enumerate() {
-            if idx > 0 && (digits - idx) % 3 == 0 {
-                grouped.push_str(&self.thousands_sep);
-            }
-            grouped.push(c);
-        }
-        let body = if frac_part.is_empty() {
+        let grouped = self.group_digits(&int_part);
+        // Importes redondos sin céntimos: 18.000 ₿ en vez de 18.000,00 ₿.
+        let body = if frac_part.is_empty() || frac_part == "00" {
             grouped
         } else {
             format!("{}{}{}", grouped, self.decimal_sep, frac_part)
@@ -85,10 +85,63 @@ impl Currency {
         }
     }
 
+    /// Formatea un entero con separador de miles (`50.000` / `50,000`).
+    pub fn format_int(&self, value: f64) -> String {
+        let sign = if value < 0.0 { "-" } else { "" };
+        let digits = format!("{:.0}", value.abs());
+        format!("{}{}", sign, self.group_digits(&digits))
+    }
+
+    /// Inserta el separador de miles en una cadena de dígitos.
+    fn group_digits(&self, int_part: &str) -> String {
+        let digits = int_part.len();
+        let mut grouped = String::with_capacity(digits + digits / 3);
+        for (idx, c) in int_part.chars().enumerate() {
+            if idx > 0 && (digits - idx).is_multiple_of(3) {
+                grouped.push_str(&self.thousands_sep);
+            }
+            grouped.push(c);
+        }
+        grouped
+    }
+
     /// Formatea un número decimal usando el separador decimal configurado.
     pub fn format_decimal(&self, value: f64, decimals: usize) -> String {
         format!("{:.*}", decimals, value).replace('.', &self.decimal_sep)
     }
+}
+
+/// Paleta de colores de la interfaz. Solo son datos: la conversión a
+/// `egui::Visuals` vive en `ui::theme` para no meter egui en el núcleo.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    /// Azul profundo, tipo consola (la de por defecto).
+    #[default]
+    Midnight,
+    /// Oscuro neutro.
+    Dark,
+    /// Claro, para pantallas con mucha luz.
+    Light,
+    /// Papel cálido, descansado para sesiones largas.
+    Sepia,
+}
+
+impl Theme {
+    /// Orden del desplegable: la de por defecto, primero.
+    pub const ALL: [Theme; 4] = [Theme::Midnight, Theme::Dark, Theme::Light, Theme::Sepia];
+
+    /// Clave i18n con el nombre de la paleta.
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Theme::Midnight => "theme.midnight",
+            Theme::Dark => "theme.dark",
+            Theme::Light => "theme.light",
+            Theme::Sepia => "theme.sepia",
+        }
+    }
+
+
 }
 
 /// Ajustes del juego.
@@ -96,6 +149,9 @@ impl Currency {
 pub struct Settings {
     pub lang: Lang,
     pub currency: Currency,
+    /// `default` por compatibilidad con ajustes guardados antes de existir.
+    #[serde(default)]
+    pub theme: Theme,
 }
 
 impl Settings {
@@ -116,13 +172,38 @@ mod tests {
     #[test]
     fn formato_espanol_simbolo_al_final() {
         let c = Currency::for_lang(Lang::Es);
-        assert_eq!(c.format_money(14_000_000.0), "14.000.000,00 ₿");
+        assert_eq!(c.format_money(14_000_000.0), "14.000.000 ₿");
         assert_eq!(c.format_money(-1_234.5), "-1.234,50 ₿");
+        assert_eq!(c.format_money(18_000.0), "18.000 ₿");
+        assert_eq!(c.format_money(0.0), "0 ₿");
+        assert_eq!(c.format_money(-0.004), "0 ₿");
+        assert_eq!(c.format_money(1_234.56), "1.234,56 ₿");
+        assert_eq!(c.format_money(0.5), "0,50 ₿");
     }
 
     #[test]
     fn formato_ingles_simbolo_al_principio() {
         let c = Currency::for_lang(Lang::En);
-        assert_eq!(c.format_money(14_000_000.0), "₿14,000,000.00");
+        assert_eq!(c.format_money(14_000_000.0), "₿14,000,000");
+        assert_eq!(c.format_money(1_234.5), "₿1,234.50");
+    }
+}
+
+#[cfg(test)]
+mod tests_formato_entero {
+    use super::*;
+
+    #[test]
+    fn el_entero_usa_separador_de_miles_del_idioma() {
+        let es = Currency::for_lang(Lang::Es);
+        assert_eq!(es.format_int(50_000.0), "50.000");
+        assert_eq!(es.format_int(245_280.4), "245.280");
+        assert_eq!(es.format_int(999.0), "999");
+        assert_eq!(es.format_int(1_000_000.0), "1.000.000");
+        assert_eq!(es.format_int(-12_345.0), "-12.345");
+
+        let en = Currency::for_lang(Lang::En);
+        assert_eq!(en.format_int(50_000.0), "50,000");
+        assert_eq!(en.format_int(245_280.4), "245,280");
     }
 }
